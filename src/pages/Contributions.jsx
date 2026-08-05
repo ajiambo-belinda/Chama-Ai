@@ -1,13 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Search, Plus, X, UserCheck, ChevronDown } from 'lucide-react'
 import { Button } from '../components/ui/button'
-
-const allMembers = [
-  'James Mwangi',
-  'Grace Wanjiru',
-  'Susan Achieng',
-  'Peter Otieno',
-]
+import { useChama } from '../context/ChamaContext'
 
 const statusStyles = {
   confirmed: 'bg-success/10 text-success',
@@ -16,19 +10,14 @@ const statusStyles = {
 }
 
 export default function Contributions() {
-  const [contributions, setContributions] = useState([
-    { name: 'James Mwangi', amount: 5000, date: 'Aug 1, 2026', method: 'M-Pesa', status: 'confirmed', recordedBy: 'self' },
-    { name: 'Grace Wanjiru', amount: 5000, date: 'Aug 1, 2026', method: 'M-Pesa', status: 'confirmed', recordedBy: 'self' },
-    { name: 'Susan Achieng', amount: 4000, date: 'Aug 3, 2026', method: 'M-Pesa', status: 'pending', recordedBy: 'self' },
-    { name: 'Peter Otieno', amount: 2000, date: 'Jul 15, 2026', method: 'Cash', status: 'confirmed', recordedBy: 'treasurer' },
-  ])
+  const { members, contributions, recordContribution } = useChama()
+  const allMembers = Object.keys(members)
 
   const [showForm, setShowForm] = useState(false)
   const [formMember, setFormMember] = useState(allMembers[0])
   const [formAmount, setFormAmount] = useState('')
   const [formMethod, setFormMethod] = useState('Cash')
 
-  // Search dropdown state
   const [searchQuery, setSearchQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef(null)
@@ -55,17 +44,7 @@ export default function Contributions() {
     const amt = Number(formAmount)
     if (!amt || amt <= 0) return
 
-    setContributions((list) => [
-      {
-        name: formMember,
-        amount: amt,
-        date: 'Just now',
-        method: formMethod,
-        status: formMethod === 'M-Pesa' ? 'pending' : 'confirmed',
-        recordedBy: 'treasurer',
-      },
-      ...list,
-    ])
+    recordContribution(formMember, amt, formMethod, 'treasurer')
     setFormAmount('')
     setShowForm(false)
   }
@@ -136,7 +115,6 @@ export default function Contributions() {
         </div>
       )}
 
-      {/* Searchable member dropdown */}
       <div className="relative max-w-sm" ref={dropdownRef}>
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
@@ -203,8 +181,8 @@ export default function Contributions() {
           </thead>
           <tbody className="divide-y divide-border">
             {visibleContributions.length > 0 ? (
-              visibleContributions.map((c, i) => (
-                <tr key={i} className="hover:bg-surface-hover transition-colors">
+              visibleContributions.map((c) => (
+                <tr key={c.id} className="hover:bg-surface-hover transition-colors">
                   <td className="px-5 py-4 text-text font-medium">{c.name}</td>
                   <td className="px-5 py-4 font-mono text-text">KES {c.amount.toLocaleString()}</td>
                   <td className="px-5 py-4 text-text-muted">{c.date}</td>

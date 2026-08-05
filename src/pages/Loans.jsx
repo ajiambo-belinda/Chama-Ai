@@ -2,16 +2,7 @@ import { useState } from 'react'
 import { Plus, X, CheckCircle2, Clock, XCircle, AlertCircle, Ban } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import ContributionRing from '../components/ContributionRing'
-
-const INTEREST_RATE = 0.1
-const LOAN_LIMIT_MULTIPLIER = 3
-
-const initialSavings = {
-  'James Mwangi': 15000,
-  'Grace Wanjiru': 13000,
-  'Peter Otieno': 4000,
-  'Susan Achieng': 8300,
-}
+import { useChama } from '../context/ChamaContext'
 
 const statusConfig = {
   active: { label: 'Active', icon: Clock, className: 'bg-primary/10 text-primary' },
@@ -22,25 +13,23 @@ const statusConfig = {
 }
 
 export default function Loans() {
-  const [loans, setLoans] = useState([
-    { name: 'James Mwangi', principal: 35000, repaid: 18000, status: 'active', dueDate: 'Sep 15, 2026' },
-    { name: 'Grace Wanjiru', principal: 15000, repaid: 16500, status: 'cleared', dueDate: 'Jul 1, 2026' },
-    { name: 'Peter Otieno', principal: 20000, repaid: 4000, status: 'at-risk', dueDate: 'Aug 10, 2026' },
-  ])
-
-  const [memberSavings, setMemberSavings] = useState(initialSavings)
-  const [bannedMembers, setBannedMembers] = useState([])
+  const {
+    members,
+    loans,
+    INTEREST_RATE,
+    requestLoan,
+    markDefaulted,
+    getMemberLoan,
+    getEligibleLimit,
+  } = useChama()
 
   const [showForm, setShowForm] = useState(false)
-  const [formMember, setFormMember] = useState(Object.keys(initialSavings)[0])
+  const [formMember, setFormMember] = useState(Object.keys(members)[0])
   const [formAmount, setFormAmount] = useState('')
   const [formError, setFormError] = useState('')
 
-  const formEligibleLimit = (memberSavings[formMember] || 0) * LOAN_LIMIT_MULTIPLIER
-
-  const hasActiveLoan = loans.some(
-    (l) => l.name === formMember && (l.status === 'active' || l.status === 'at-risk' || l.status === 'pending')
-  )
+  const formEligibleLimit = getEligibleLimit(formMember)
+  const bannedMembers = Object.entries(members).filter(([, m]) => m.banned).map(([name]) => name)
 
   function handleSubmitRequest() {
     const amt = Number(formAmount)
@@ -49,11 +38,11 @@ export default function Loans() {
       setFormError('Enter a valid amount.')
       return
     }
-    if (bannedMembers.includes(formMember)) {
+    if (members[formMember]?.banned) {
       setFormError(`${formMember} is banned from borrowing due to a prior default.`)
       return
     }
-    if (hasActiveLoan) {
+    if (getMemberLoan(formMember)) {
       setFormError(`${formMember} must clear their current loan before requesting a new one.`)
       return
     }
@@ -62,34 +51,10 @@ export default function Loans() {
       return
     }
 
-    setLoans((list) => [
-      { name: formMember, principal: amt, repaid: 0, status: 'pending', dueDate: '—' },
-      ...list,
-    ])
+    requestLoan(formMember, amt)
     setFormAmount('')
     setFormError('')
     setShowForm(false)
-  }
-
-  function handleMarkDefaulted(loanIndex) {
-    const loan = loans[loanIndex]
-    const interest = loan.principal * INTEREST_RATE
-    const totalOwed = loan.principal + interest
-    const balanceRemaining = Math.max(totalOwed - loan.repaid, 0)
-
-    setMemberSavings((prev) => {
-      const current = prev[loan.name] || 0
-      const deducted = Math.min(current, balanceRemaining)
-      return { ...prev, [loan.name]: current - deducted }
-    })
-
-    setBannedMembers((prev) => (prev.includes(loan.name) ? prev : [...prev, loan.name]))
-
-    setLoans((list) =>
-      list.map((l, i) =>
-        i === loanIndex ? { ...l, status: 'defaulted', repaid: Math.min(l.repaid + balanceRemaining, totalOwed) } : l
-      )
-    )
   }
 
   return (
@@ -128,7 +93,7 @@ export default function Loans() {
                 onChange={(e) => { setFormMember(e.target.value); setFormError('') }}
                 className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                {Object.keys(initialSavings).map((m) => (
+                {Object.keys(members).map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
@@ -164,19 +129,19 @@ export default function Loans() {
       )}
 
       <div className="grid gap-4">
-        {loans.map((loan, i) => {
-          const savings = memberSavings[loan.name] || 0
+        {loans.map((loan) => {
+          const savings = members[loan.name]?.savings || 0
           const interest = loan.principal * INTEREST_RATE
           const totalOwed = loan.principal + interest
           const balanceRemaining = Math.max(totalOwed - loan.repaid, 0)
           const percent = totalOwed ? Math.round((loan.repaid / totalOwed) * 100) : 0
-          const eligibleLimit = savings * LOAN_LIMIT_MULTIPLIER
+          const eligibleLimit = getEligibleLimit(loan.name)
 
           const status = statusConfig[loan.status]
           const StatusIcon = status.icon
 
           return (
-            <div key={i} className="bg-surface border border-border rounded-xl p-5">
+            <div key={loan.id} className="bg-surface border border-border rounded-xl p-5">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <ContributionRing
@@ -239,7 +204,7 @@ export default function Loans() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleMarkDefaulted(i)}
+                    onClick={() => markDefaulted(loan.id)}
                     className="text-xs h-7 border-danger/30 text-danger hover:bg-danger/10"
                   >
                     Mark as Defaulted

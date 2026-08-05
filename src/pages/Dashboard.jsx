@@ -1,23 +1,54 @@
+import { Link } from 'react-router-dom'
 import { Sparkles, AlertTriangle, ArrowUpRight } from 'lucide-react'
 import { getGreeting } from '../lib/greeting'
 import ContributionRing from '../components/ContributionRing'
-import { Link } from 'react-router-dom'
-
-const stats = [
-  { label: 'Group balance', value: 'KES 842,300', delta: '+12.4%', up: true },
-  { label: 'Active loans', value: 'KES 210,000', delta: '4 members', up: null },
-  { label: 'This cycle collected', value: 'KES 68,000 / 80,000', delta: '85%', up: true },
-]
-
-const members = [
-  { name: 'James Mwangi', percent: 100, tone: 'success', status: 'Paid this cycle' },
-  { name: 'Grace Wanjiru', percent: 100, tone: 'success', status: 'Paid this cycle' },
-  { name: 'Peter Otieno', percent: 40, tone: 'danger', status: '3 cycles behind' },
-  { name: 'Susan Achieng', percent: 80, tone: 'warning', status: 'Due in 2 days' },
-]
+import { useChama } from '../context/ChamaContext'
 
 export default function Dashboard() {
   const greeting = getGreeting()
+  const { members, loans, contributions, INTEREST_RATE } = useChama()
+
+  const memberNames = Object.keys(members)
+  const groupBalance = Object.values(members).reduce((sum, m) => sum + m.savings, 0)
+
+  const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'at-risk')
+  const activeLoanTotal = activeLoans.reduce((sum, l) => sum + l.principal, 0)
+
+  // "This cycle" = contributions recorded today/most recently — using all for now until real dates exist
+  const cycleTarget = memberNames.length * 5000 // rough placeholder target: 5,000 per member
+  const cycleCollected = contributions
+    .filter((c) => c.status === 'confirmed')
+    .reduce((sum, c) => sum + c.amount, 0)
+  const cyclePercent = Math.min(Math.round((cycleCollected / cycleTarget) * 100), 100)
+
+  const atRiskMember = loans.find((l) => l.status === 'at-risk')
+
+  const memberStatus = memberNames.map((name) => {
+    const memberContributions = contributions.filter((c) => c.name === name)
+    const hasConfirmedThisCycle = memberContributions.some((c) => c.status === 'confirmed')
+    const hasPending = memberContributions.some((c) => c.status === 'pending')
+    const memberLoan = loans.find((l) => l.name === name && (l.status === 'at-risk' || l.status === 'defaulted'))
+
+    let percent = 0
+    let tone = 'primary'
+    let status = 'No contribution yet'
+
+    if (memberLoan) {
+      percent = 40
+      tone = 'danger'
+      status = memberLoan.status === 'defaulted' ? 'Defaulted' : 'Behind on loan'
+    } else if (hasConfirmedThisCycle) {
+      percent = 100
+      tone = 'success'
+      status = 'Paid this cycle'
+    } else if (hasPending) {
+      percent = 60
+      tone = 'warning'
+      status = 'Payment pending'
+    }
+
+    return { name, percent, tone, status }
+  })
 
   return (
     <div className="space-y-7">
@@ -27,48 +58,63 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        {stats.map((s) => (
-          <div key={s.label} className="bg-surface border border-border rounded-xl p-5">
-            <p className="text-sm text-text-muted">{s.label}</p>
-            <p className="text-xl font-mono font-semibold text-text mt-2">{s.value}</p>
-            {s.delta && (
-              <p className={`text-xs mt-1.5 flex items-center gap-1 ${s.up ? 'text-success' : 'text-text-muted'}`}>
-                {s.up && <ArrowUpRight size={12} />}
-                {s.delta}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-accent/10 border border-accent/25 rounded-xl p-5 flex items-start gap-4">
-        <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
-          <Sparkles size={17} className="text-accent" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-text">AI Treasurer flagged something</p>
-          <p className="text-sm text-text-muted mt-1">
-            Peter Otieno has missed 3 consecutive cycles — pattern matches early default risk. Consider a check-in
-            before the next loan review.
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">Group balance</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">KES {groupBalance.toLocaleString()}</p>
+          <p className="text-xs mt-1.5 flex items-center gap-1 text-success">
+            <ArrowUpRight size={12} />
+            Live from member savings
           </p>
         </div>
-        <Link
-  to="/ai-treasurer"
-  className="text-xs font-medium text-accent border border-accent/30 rounded-lg px-3 py-1.5 hover:bg-accent/10 transition-colors whitespace-nowrap"
->
-  View details
-</Link>
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">Active loans</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">KES {activeLoanTotal.toLocaleString()}</p>
+          <p className="text-xs mt-1.5 text-text-muted">{activeLoans.length} member{activeLoans.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">This cycle collected</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">
+            KES {cycleCollected.toLocaleString()} / {cycleTarget.toLocaleString()}
+          </p>
+          <p className="text-xs mt-1.5 flex items-center gap-1 text-success">
+            <ArrowUpRight size={12} />
+            {cyclePercent}%
+          </p>
+        </div>
       </div>
+
+      {atRiskMember && (
+        <div className="bg-accent/10 border border-accent/25 rounded-xl p-5 flex items-start gap-4">
+          <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
+            <Sparkles size={17} className="text-accent" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-text">AI Treasurer flagged something</p>
+            <p className="text-sm text-text-muted mt-1">
+              {atRiskMember.name} is behind on their loan repayment — pattern matches early default risk.
+              Consider a check-in before further action.
+            </p>
+          </div>
+          <Link
+            to="/ai-treasurer"
+            className="text-xs font-medium text-accent border border-accent/30 rounded-lg px-3 py-1.5 hover:bg-accent/10 transition-colors whitespace-nowrap"
+          >
+            View details
+          </Link>
+        </div>
+      )}
 
       <div className="bg-surface border border-border rounded-xl">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-sm font-medium text-text">This cycle's contributions</h2>
-          <span className="text-xs text-text-muted font-mono">4 of 12 members</span>
+          <span className="text-xs text-text-muted font-mono">
+            {memberStatus.filter((m) => m.tone === 'success').length} of {memberNames.length} members
+          </span>
         </div>
         <div className="divide-y divide-border">
-          {members.map((m) => (
+          {memberStatus.map((m) => (
             <div key={m.name} className="px-5 py-4 flex items-center justify-between">
-              <ContributionRing percent={m.percent} tone={m.tone} label={m.name} sublabel={m.status} />
+              <ContributionRing percent={m.percent} tone={m.tone} label={m.name} sublabel={m.status} size={44} strokeWidth={4} />
               {m.tone === 'danger' && <AlertTriangle size={16} className="text-danger" />}
             </div>
           ))}

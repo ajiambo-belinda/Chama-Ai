@@ -1,61 +1,11 @@
-import { useState } from 'react'
-import { Sparkles, Download, TrendingUp, TrendingDown } from 'lucide-react'
+import { Sparkles, Download, TrendingUp } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { useChama } from '../context/ChamaContext'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
-
-// Mock per-group report data — later this comes from the backend, filtered by group ID
-const reportsData = {
-  'Bumbe Genesis Savings Group': {
-    trend: [
-      { month: 'Mar', amount: 58000 },
-      { month: 'Apr', amount: 62000 },
-      { month: 'May', amount: 71000 },
-      { month: 'Jun', amount: 65000 },
-      { month: 'Jul', amount: 74000 },
-      { month: 'Aug', amount: 68000 },
-    ],
-    loanBreakdown: [
-      { name: 'Active', value: 2, color: 'var(--color-primary)' },
-      { name: 'Cleared', value: 1, color: 'var(--color-success)' },
-      { name: 'At risk', value: 1, color: 'var(--color-danger)' },
-    ],
-    stats: [
-      { label: 'Total collected (6mo)', value: 'KES 398,000' },
-      { label: 'Average per cycle', value: 'KES 66,333' },
-      { label: 'Collection rate', value: '85%' },
-    ],
-    summary:
-      'The group collected KES 68,000 this cycle, 85% of the KES 80,000 target. Contributions have grown 17% since March. One member (Peter Otieno) is showing early default risk and should be prioritized for follow-up. Loan repayments are on track overall, with 2 of 4 active loans in good standing.',
-    trendChange: '+17%',
-    trendUp: true,
-  },
-  'Familia Table Banking': {
-    trend: [
-      { month: 'Mar', amount: 21000 },
-      { month: 'Apr', amount: 19500 },
-      { month: 'May', amount: 22000 },
-      { month: 'Jun', amount: 18000 },
-      { month: 'Jul', amount: 17000 },
-      { month: 'Aug', amount: 20500 },
-    ],
-    loanBreakdown: [
-      { name: 'Active', value: 1, color: 'var(--color-primary)' },
-      { name: 'Cleared', value: 2, color: 'var(--color-success)' },
-    ],
-    stats: [
-      { label: 'Total collected (6mo)', value: 'KES 118,000' },
-      { label: 'Average per cycle', value: 'KES 19,667' },
-      { label: 'Collection rate', value: '92%' },
-    ],
-    summary:
-      'This group collected KES 20,500 this cycle, 92% of target — consistently one of the more reliable groups. Contributions dipped slightly in June and July but recovered in August. No members currently at risk of default.',
-    trendChange: '-2.4%',
-    trendUp: false,
-  },
-}
+import jsPDF from 'jspdf'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -70,123 +20,233 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Reports() {
-  const groupNames = Object.keys(reportsData)
-  const [activeGroup, setActiveGroup] = useState(groupNames[0])
-  const data = reportsData[activeGroup]
+  const { groups, members, loans, contributions, getGroupBalance } = useChama()
+
+  const activeGroup = groups.find((g) => g.active) || groups[0]
+  const groupMembers = activeGroup?.members || []
+
+  const groupLoans = loans.filter((l) => groupMembers.includes(l.name))
+  const groupContributions = contributions.filter((c) => groupMembers.includes(c.name))
+  const balance = getGroupBalance(groupMembers)
+
+  const totalCollected = groupContributions
+    .filter((c) => c.status === 'confirmed')
+    .reduce((sum, c) => sum + c.amount, 0)
+
+  const cycleTarget = groupMembers.length * 5000
+  const collectionRate = cycleTarget ? Math.min(Math.round((totalCollected / cycleTarget) * 100), 100) : 0
+
+  const loanStatusCounts = groupLoans.reduce((acc, l) => {
+    acc[l.status] = (acc[l.status] || 0) + 1
+    return acc
+  }, {})
+
+  const statusColors = {
+    active: 'var(--color-primary)',
+    cleared: 'var(--color-success)',
+    'at-risk': 'var(--color-danger)',
+    pending: 'var(--color-warning)',
+    defaulted: 'var(--color-danger)',
+  }
+
+  const loanBreakdown = Object.entries(loanStatusCounts).map(([name, value]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    value,
+    color: statusColors[name],
+  }))
+
+  // Trend history isn't tracked yet (needs backend/timestamps) — showing current cycle only until then
+  const trend = [{ month: 'This cycle', amount: totalCollected }]
+
+  const riskyMembers = groupLoans.filter((l) => l.status === 'at-risk' || l.status === 'defaulted')
+
+  const summary = riskyMembers.length > 0
+    ? `The group has collected KES ${totalCollected.toLocaleString()} this cycle, ${collectionRate}% of the KES ${cycleTarget.toLocaleString()} target. ${riskyMembers.map((l) => l.name).join(', ')} ${riskyMembers.length === 1 ? 'is' : 'are'} showing default risk and should be prioritized for follow-up.`
+    : `The group has collected KES ${totalCollected.toLocaleString()} this cycle, ${collectionRate}% of the KES ${cycleTarget.toLocaleString()} target. No members are currently at risk — the group is in good standing.`
+
+  if (!activeGroup) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        No groups yet — create one on the Groups page first.
+      </div>
+    )
+  }
+
+  function handleExportPDF() {
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  let y = 20
+
+  // Header
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Chama AI — Monthly Report', 14, y)
+  y += 8
+
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(100)
+  doc.text(activeGroup.name, 14, y)
+  y += 6
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}`, 14, y)
+  y += 12
+
+  // Divider
+  doc.setDrawColor(220)
+  doc.line(14, y, pageWidth - 14, y)
+  y += 10
+
+  // Stats
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(20)
+  doc.text('Summary', 14, y)
+  y += 8
+
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'normal')
+  const stats = [
+    ['Group balance', `KES ${balance.toLocaleString()}`],
+    ['This cycle collected', `KES ${totalCollected.toLocaleString()}`],
+    ['Collection rate', `${collectionRate}%`],
+  ]
+  stats.forEach(([label, value]) => {
+    doc.setTextColor(100)
+    doc.text(label, 14, y)
+    doc.setTextColor(20)
+    doc.text(value, pageWidth - 14, y, { align: 'right' })
+    y += 7
+  })
+  y += 6
+
+  // AI Summary
+  doc.setDrawColor(220)
+  doc.line(14, y, pageWidth - 14, y)
+  y += 10
+
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(20)
+  doc.text('AI Monthly Summary', 14, y)
+  y += 8
+
+  doc.setFontSize(10.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(60)
+  const summaryLines = doc.splitTextToSize(summary, pageWidth - 28)
+  doc.text(summaryLines, 14, y)
+  y += summaryLines.length * 5.5 + 10
+
+  // Loan breakdown
+  doc.setDrawColor(220)
+  doc.line(14, y, pageWidth - 14, y)
+  y += 10
+
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(20)
+  doc.text('Loan Status Breakdown', 14, y)
+  y += 8
+
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'normal')
+  if (loanBreakdown.length > 0) {
+    loanBreakdown.forEach((item) => {
+      doc.setTextColor(100)
+      doc.text(item.name, 14, y)
+      doc.setTextColor(20)
+      doc.text(`${item.value} loan${item.value !== 1 ? 's' : ''}`, pageWidth - 14, y, { align: 'right' })
+      y += 7
+    })
+  } else {
+    doc.setTextColor(120)
+    doc.text('No loans recorded for this group.', 14, y)
+    y += 7
+  }
+
+  // Footer
+  doc.setFontSize(9)
+  doc.setTextColor(150)
+  doc.text('Generated by Chama AI', 14, doc.internal.pageSize.getHeight() - 10)
+
+  const fileName = `${activeGroup.name.replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(fileName)
+}
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text">Reports</h1>
-          <p className="text-sm text-text-muted mt-1">Group performance and financial summaries</p>
+          <p className="text-sm text-text-muted mt-1">{activeGroup.name}</p>
         </div>
-        <Button variant="outline" className="gap-2">
-          <Download size={16} />
-          Export PDF
-        </Button>
+        <Button variant="outline" className="gap-2" onClick={handleExportPDF}>
+  <Download size={16} />
+  Export PDF
+</Button>
       </div>
 
-      {/* Group selector tabs */}
-      <div className="flex gap-2 border-b border-border">
-        {groupNames.map((name) => (
-          <button
-            key={name}
-            onClick={() => setActiveGroup(name)}
-            className={`text-sm px-4 py-2.5 border-b-2 transition-colors -mb-px ${
-              activeGroup === name
-                ? 'border-primary text-primary font-medium'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-
-      {/* AI-generated summary */}
       <div className="bg-accent/10 border border-accent/25 rounded-xl p-5 flex items-start gap-4">
         <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
           <Sparkles size={17} className="text-accent" />
         </div>
         <div>
-          <p className="text-sm font-medium text-text">AI monthly summary — August 2026</p>
-          <p className="text-sm text-text-muted mt-1 leading-relaxed">{data.summary}</p>
+          <p className="text-sm font-medium text-text">AI monthly summary</p>
+          <p className="text-sm text-text-muted mt-1 leading-relaxed">{summary}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        {data.stats.map((s) => (
-          <div key={s.label} className="bg-surface border border-border rounded-xl p-5">
-            <p className="text-sm text-text-muted">{s.label}</p>
-            <p className="text-xl font-mono font-semibold text-text mt-2">{s.value}</p>
-          </div>
-        ))}
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">Group balance</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">KES {balance.toLocaleString()}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">This cycle collected</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">KES {totalCollected.toLocaleString()}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <p className="text-sm text-text-muted">Collection rate</p>
+          <p className="text-xl font-mono font-semibold text-text mt-2">{collectionRate}%</p>
+        </div>
       </div>
 
-      {/* Contribution trend chart */}
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-medium text-text">Contribution trend</h2>
-          <span className={`text-xs flex items-center gap-1 ${data.trendUp ? 'text-success' : 'text-danger'}`}>
-            {data.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {data.trendChange} since March
+          <span className="text-xs text-text-muted flex items-center gap-1">
+            <TrendingUp size={12} />
+            Historical trend available once backend is connected
           </span>
         </div>
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={data.trend}>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={trend}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis dataKey="month" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} />
             <YAxis stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v / 1000}k`} />
             <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="amount"
-              stroke="var(--color-primary)"
-              strokeWidth={2.5}
-              dot={{ fill: 'var(--color-primary)', r: 4 }}
-              activeDot={{ r: 6 }}
-            />
+            <Line type="monotone" dataKey="amount" stroke="var(--color-primary)" strokeWidth={2.5} dot={{ fill: 'var(--color-primary)', r: 5 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Loan status breakdown */}
       <div className="bg-surface border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-text mb-4">Loan status breakdown</h2>
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie
-              data={data.loanBreakdown}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius={55}
-              outerRadius={80}
-              paddingAngle={3}
-            >
-              {data.loanBreakdown.map((entry, i) => (
-                <Cell key={i} fill={entry.color} />
-              ))}
-            </Pie>
-            <Legend
-              verticalAlign="middle"
-              align="right"
-              layout="vertical"
-              iconType="circle"
-              formatter={(value) => <span style={{ color: 'var(--color-text)', fontSize: 13 }}>{value}</span>}
-            />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        {loanBreakdown.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={loanBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={3}>
+                {loanBreakdown.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" formatter={(value) => <span style={{ color: 'var(--color-text)', fontSize: 13 }}>{value}</span>} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 13 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-sm text-text-muted text-center py-8">No loans recorded for this group yet.</p>
+        )}
       </div>
     </div>
   )

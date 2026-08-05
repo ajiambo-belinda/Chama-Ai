@@ -2,14 +2,17 @@ import { useState } from 'react'
 import { Plus, Minus, ArrowUpFromLine, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import ContributionRing from '../components/ContributionRing'
+import { useChama } from '../context/ChamaContext'
 
-const INTEREST_RATE = 0.1
-const LOAN_LIMIT_MULTIPLIER = 3
+const CURRENT_USER = 'James Mwangi' // stand-in for logged-in user until auth exists
 
 export default function Profile() {
-  const [savings, setSavings] = useState(15000)
-  const [loanPrincipal] = useState(35000)
-  const [loanRepaid, setLoanRepaid] = useState(18000)
+  const { members, INTEREST_RATE, addSavings, repayLoan, getMemberLoan, getEligibleLimit } = useChama()
+
+  const savings = members[CURRENT_USER]?.savings || 0
+  const loan = getMemberLoan(CURRENT_USER)
+  const eligibleLimit = getEligibleLimit(CURRENT_USER)
+
   const [withdrawals, setWithdrawals] = useState([
     { id: 1, amount: 3000, status: 'approved', date: 'Jul 20, 2026' },
   ])
@@ -18,24 +21,22 @@ export default function Profile() {
   const [repayAmount, setRepayAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
 
-  const interest = loanPrincipal * INTEREST_RATE
-  const totalOwed = loanPrincipal + interest
-  const balanceRemaining = Math.max(totalOwed - loanRepaid, 0)
-  const percentRepaid = totalOwed ? Math.round((loanRepaid / totalOwed) * 100) : 0
-  const eligibleLimit = savings * LOAN_LIMIT_MULTIPLIER
+  const totalOwed = loan ? loan.principal * (1 + INTEREST_RATE) : 0
+  const balanceRemaining = loan ? Math.max(totalOwed - loan.repaid, 0) : 0
+  const percentRepaid = loan && totalOwed ? Math.round((loan.repaid / totalOwed) * 100) : 0
 
   function handleAddSavings() {
     const amt = Number(saveAmount)
     if (amt > 0) {
-      setSavings((s) => s + amt)
+      addSavings(CURRENT_USER, amt)
       setSaveAmount('')
     }
   }
 
   function handleRepayLoan() {
     const amt = Number(repayAmount)
-    if (amt > 0) {
-      setLoanRepaid((r) => Math.min(r + amt, totalOwed))
+    if (amt > 0 && loan) {
+      repayLoan(loan.id, amt)
       setRepayAmount('')
     }
   }
@@ -56,7 +57,7 @@ export default function Profile() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-text">My Account</h1>
-        <p className="text-sm text-text-muted mt-1">Lyndah Ajiambo · Member</p>
+        <p className="text-sm text-text-muted mt-1">{CURRENT_USER} · Member</p>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -95,14 +96,14 @@ export default function Profile() {
         </div>
       </div>
 
-      {loanPrincipal > 0 && (
+      {loan && (
         <div className="bg-surface border border-border rounded-xl p-5">
           <div className="flex items-center gap-4 mb-3">
             <ContributionRing percent={percentRepaid} size={44} strokeWidth={4} tone="primary" />
             <div>
               <h2 className="text-sm font-medium text-text">Repay my loan</h2>
               <p className="text-xs text-text-muted">
-                KES {loanRepaid.toLocaleString()} paid of {totalOwed.toLocaleString()} total owed (incl. {INTEREST_RATE * 100}% interest)
+                KES {loan.repaid.toLocaleString()} paid of {totalOwed.toLocaleString()} total owed (incl. {INTEREST_RATE * 100}% interest)
               </p>
             </div>
           </div>

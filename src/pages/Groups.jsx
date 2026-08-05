@@ -1,42 +1,17 @@
 import { useState } from 'react'
 import { Plus, X, Users, ArrowRight, Crown, Check } from 'lucide-react'
 import { Button } from '../components/ui/button'
-
-// Registered members and their current savings — later this comes from the backend (all users on the platform)
-const registeredMembers = [
-  { name: 'James Mwangi', savings: 15000, active: true },
-  { name: 'Grace Wanjiru', savings: 13000, active: true },
-  { name: 'Peter Otieno', savings: 4000, active: true },
-  { name: 'Susan Achieng', savings: 8300, active: true },
-  { name: 'Daniel Kiplagat', savings: 0, active: false }, // inactive — hasn't logged in / no activity yet
-]
+import { useChama } from '../context/ChamaContext'
 
 export default function Groups() {
-  const [groups, setGroups] = useState([
-    {
-      id: 1,
-      name: 'Bumbe Genesis Savings Group',
-      members: ['James Mwangi', 'Grace Wanjiru', 'Peter Otieno', 'Susan Achieng'],
-      role: 'Treasurer',
-      cycle: 'Monthly',
-      active: true,
-    },
-    {
-      id: 2,
-      name: 'Familia Table Banking',
-      members: ['James Mwangi', 'Grace Wanjiru'],
-      role: 'Member',
-      cycle: 'Weekly',
-      active: false,
-    },
-  ])
+  const { members, groups, createGroup, switchActiveGroup, getGroupBalance } = useChama()
 
   const [showForm, setShowForm] = useState(false)
   const [formName, setFormName] = useState('')
   const [formCycle, setFormCycle] = useState('Monthly')
   const [selectedMembers, setSelectedMembers] = useState([])
 
-  const activeMembers = registeredMembers.filter((m) => m.active)
+  const registeredNames = Object.keys(members)
 
   function toggleMember(name) {
     setSelectedMembers((prev) =>
@@ -44,37 +19,14 @@ export default function Groups() {
     )
   }
 
-  const selectedBalance = registeredMembers
-    .filter((m) => selectedMembers.includes(m.name))
-    .reduce((sum, m) => sum + m.savings, 0)
-
-  function groupBalance(memberNames) {
-    return registeredMembers
-      .filter((m) => memberNames.includes(m.name))
-      .reduce((sum, m) => sum + m.savings, 0)
-  }
+  const selectedBalance = selectedMembers.reduce((sum, name) => sum + (members[name]?.savings || 0), 0)
 
   function handleCreateGroup() {
     if (!formName.trim() || selectedMembers.length === 0) return
-
-    setGroups((list) => [
-      ...list,
-      {
-        id: Date.now(),
-        name: formName.trim(),
-        members: selectedMembers,
-        role: 'Treasurer',
-        cycle: formCycle,
-        active: false,
-      },
-    ])
+    createGroup(formName.trim(), selectedMembers, formCycle)
     setFormName('')
     setSelectedMembers([])
     setShowForm(false)
-  }
-
-  function handleSwitchGroup(id) {
-    setGroups((list) => list.map((g) => ({ ...g, active: g.id === id })))
   }
 
   return (
@@ -119,15 +71,15 @@ export default function Groups() {
 
           <div>
             <label className="text-xs text-text-muted block mb-2">
-              Add members ({activeMembers.length} active members registered on Chama AI)
+              Add members ({registeredNames.length} registered on Chama AI)
             </label>
             <div className="border border-border rounded-lg divide-y divide-border max-h-52 overflow-y-auto">
-              {activeMembers.map((m) => {
-                const isSelected = selectedMembers.includes(m.name)
+              {registeredNames.map((name) => {
+                const isSelected = selectedMembers.includes(name)
                 return (
                   <button
-                    key={m.name}
-                    onClick={() => toggleMember(m.name)}
+                    key={name}
+                    onClick={() => toggleMember(name)}
                     className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-hover transition-colors text-left"
                   >
                     <div className="flex items-center gap-3">
@@ -138,10 +90,10 @@ export default function Groups() {
                       >
                         {isSelected && <Check size={11} className="text-white" />}
                       </div>
-                      <span className="text-sm text-text">{m.name}</span>
+                      <span className="text-sm text-text">{name}</span>
                     </div>
                     <span className="text-xs font-mono text-text-muted">
-                      KES {m.savings.toLocaleString()} saved
+                      KES {members[name].savings.toLocaleString()} saved
                     </span>
                   </button>
                 )
@@ -169,7 +121,7 @@ export default function Groups() {
 
       <div className="grid grid-cols-2 gap-4">
         {groups.map((g) => {
-          const balance = groupBalance(g.members)
+          const balance = getGroupBalance(g.members)
           return (
             <div
               key={g.id}
@@ -202,14 +154,14 @@ export default function Groups() {
                   </p>
                 </div>
                 <span className="text-xs text-text-muted flex items-center gap-1">
-                  {g.role === 'Treasurer' && <Crown size={12} className="text-accent" />}
-                  {g.role}
+                  {g.active && <Crown size={12} className="text-accent" />}
+                  {g.active ? 'Treasurer' : 'Member'}
                 </span>
               </div>
 
               {!g.active && (
                 <button
-                  onClick={() => handleSwitchGroup(g.id)}
+                  onClick={() => switchActiveGroup(g.id)}
                   className="w-full mt-4 text-xs font-medium text-primary flex items-center justify-center gap-1.5 py-2 rounded-lg border border-border hover:bg-surface-hover transition-colors"
                 >
                   Switch to this group
