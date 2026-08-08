@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Users, Wallet, HandCoins, FileBarChart, Sparkles, Settings, User } from 'lucide-react'
 import Logo from './Logo'
+import { useAuth } from '../context/AuthContext'
+import { LogOut } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -14,6 +16,7 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  const { user, logout } = useAuth()
   return (
     <aside className="w-60 shrink-0 h-screen sticky top-0 border-r border-border bg-surface flex flex-col">
       <div className="px-5 py-5 border-b border-border">
@@ -46,16 +49,19 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-4 py-4 border-t border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
-            BL
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm text-text truncate">Belinda L.</p>
-            <p className="text-xs text-text-muted truncate">Treasurer</p>
-          </div>
-        </div>
-      </div>
+  <div className="flex items-center gap-3">
+    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
+      {user?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+    </div>
+    <div className="min-w-0 flex-1">
+      <p className="text-sm text-text truncate">{user?.name}</p>
+      <p className="text-xs text-text-muted truncate">{user?.email}</p>
+    </div>
+    <button onClick={logout} className="text-text-muted hover:text-danger transition-colors" title="Log out">
+      <LogOut size={16} />
+    </button>
+  </div>
+</div>
     </aside>
   )
 }
