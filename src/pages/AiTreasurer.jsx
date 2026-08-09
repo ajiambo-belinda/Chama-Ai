@@ -3,55 +3,78 @@ import ContributionRing from '../components/ContributionRing'
 import { useChama } from '../context/ChamaContext'
 
 export default function AiTreasurer() {
-  const { members, loans, contributions, INTEREST_RATE } = useChama()
+  const { activeGroup, loans, contributions } = useChama()
 
   const insights = []
 
-  // Generate an insight for every at-risk or defaulted loan
-  loans
-    .filter((l) => l.status === 'at-risk' || l.status === 'defaulted')
-    .forEach((loan) => {
-      const totalOwed = loan.principal * (1 + INTEREST_RATE)
-      const balanceRemaining = Math.max(totalOwed - loan.repaid, 0)
-      const percent = totalOwed ? Math.round((loan.repaid / totalOwed) * 100) : 0
+  if (activeGroup) {
+    loans
+      .filter((l) => l.status === 'at-risk' || l.status === 'defaulted')
+      .forEach((loan) => {
+        const totalOwed = loan.principal * (1 + activeGroup.interestRate / 100)
+        const balanceRemaining = Math.max(totalOwed - loan.repaid, 0)
+        const percent = totalOwed ? Math.round((loan.repaid / totalOwed) * 100) : 0
 
-      insights.push({
-        id: `loan-${loan.id}`,
-        member: loan.name,
-        severity: 'high',
-        title: loan.status === 'defaulted' ? 'Loan defaulted' : 'Default risk pattern detected',
-        detail:
-          loan.status === 'defaulted'
-            ? `${loan.name}'s loan was marked as defaulted. KES ${balanceRemaining.toLocaleString()} was recovered from their savings, and they are now restricted from taking new loans until their standing is reviewed.`
-            : `${loan.name} has an outstanding loan balance of KES ${balanceRemaining.toLocaleString()} (${100 - percent}% unpaid) and is flagged at-risk. This matches the early-warning pattern for default.`,
-        recommendation:
-          loan.status === 'defaulted'
-            ? 'Review whether this member should be reinstated after demonstrating improved standing.'
-            : 'Schedule a check-in before the loan review deadline. Consider a revised repayment plan if hardship is confirmed.',
-        percent,
-        tone: 'danger',
+        insights.push({
+          id: `loan-${loan._id}`,
+          member: loan.member.name,
+          severity: 'high',
+          title: loan.status === 'defaulted' ? 'Loan defaulted' : 'Default risk pattern detected',
+          detail:
+            loan.status === 'defaulted'
+              ? `${loan.member.name}'s loan was marked as defaulted. KES ${Math.round(balanceRemaining).toLocaleString()} was recovered from their savings, and they are now restricted from taking new loans.`
+              : `${loan.member.name} has an outstanding loan balance of KES ${Math.round(balanceRemaining).toLocaleString()} (${100 - percent}% unpaid) and is flagged at-risk.`,
+          recommendation:
+            loan.status === 'defaulted'
+              ? 'Review whether this member should be reinstated after demonstrating improved standing.'
+              : 'Schedule a check-in before the loan review deadline. Consider a revised repayment plan if hardship is confirmed.',
+          percent,
+          tone: 'danger',
+        })
       })
-    })
 
-  // Generate an insight for members with a pending (unconfirmed) contribution
-  contributions
-    .filter((c) => c.status === 'pending')
-    .forEach((c) => {
-      insights.push({
-        id: `contrib-${c.id}`,
-        member: c.name,
-        severity: 'medium',
-        title: 'Contribution awaiting confirmation',
-        detail: `${c.name}'s contribution of KES ${c.amount.toLocaleString()} via ${c.method} is still pending reconciliation.`,
-        recommendation: 'No elevated concern — routine confirmation once the payment clears.',
-        percent: 60,
-        tone: 'warning',
+    contributions
+      .filter((c) => c.status === 'pending')
+      .forEach((c) => {
+        insights.push({
+          id: `contrib-${c._id}`,
+          member: c.member?.name || 'Unknown',
+          severity: 'medium',
+          title: 'Contribution awaiting confirmation',
+          detail: `${c.member?.name}'s contribution of KES ${c.amount.toLocaleString()} via ${c.method} is still pending reconciliation.`,
+          recommendation: 'No elevated concern — routine confirmation once the payment clears.',
+          percent: 60,
+          tone: 'warning',
+        })
       })
-    })
+
+    loans
+      .filter((l) => l.status === 'pending')
+      .forEach((loan) => {
+        insights.push({
+          id: `pending-loan-${loan._id}`,
+          member: loan.member.name,
+          severity: 'medium',
+          title: 'Loan request awaiting approval',
+          detail: `${loan.member.name} has requested KES ${loan.principal.toLocaleString()} and it's awaiting treasurer approval.`,
+          recommendation: 'Review the request against the group\'s current liquidity before approving.',
+          percent: 0,
+          tone: 'warning',
+        })
+      })
+  }
 
   const severityStyles = {
     high: { badge: 'bg-danger/10 text-danger', icon: AlertTriangle },
     medium: { badge: 'bg-warning/10 text-warning', icon: TrendingDown },
+  }
+
+  if (!activeGroup) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        No active group — create or select a group first.
+      </div>
+    )
   }
 
   return (
@@ -62,7 +85,7 @@ export default function AiTreasurer() {
         </div>
         <div>
           <h1 className="text-2xl font-semibold text-text">AI Treasurer</h1>
-          <p className="text-sm text-text-muted mt-0.5">Insights and risk patterns across your group</p>
+          <p className="text-sm text-text-muted mt-0.5">{activeGroup.name}</p>
         </div>
       </div>
 
@@ -116,7 +139,7 @@ export default function AiTreasurer() {
         <div>
           <p className="text-sm text-text">Ask the AI Treasurer directly</p>
           <p className="text-xs text-text-muted mt-0.5">
-            Conversational queries like "who hasn't paid this month" — coming once the backend is connected.
+            Conversational queries like "who hasn't paid this month" — coming in a future update.
           </p>
         </div>
       </div>

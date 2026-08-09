@@ -10,17 +10,25 @@ const statusStyles = {
 }
 
 export default function Contributions() {
-  const { members, contributions, recordContribution } = useChama()
-  const allMembers = Object.keys(members)
+  const { activeGroup, contributions, recordContribution } = useChama()
+
+  const groupMembers = activeGroup?.members || []
 
   const [showForm, setShowForm] = useState(false)
-  const [formMember, setFormMember] = useState(allMembers[0])
+  const [formMemberId, setFormMemberId] = useState('')
   const [formAmount, setFormAmount] = useState('')
   const [formMethod, setFormMethod] = useState('Cash')
+  const [submitting, setSubmitting] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef(null)
+
+  useEffect(() => {
+    if (groupMembers.length > 0 && !formMemberId) {
+      setFormMemberId(groupMembers[0]._id)
+    }
+  }, [groupMembers, formMemberId])
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -32,21 +40,34 @@ export default function Contributions() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const filteredMembers = allMembers.filter((m) =>
-    m.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredMembers = groupMembers.filter((m) =>
+    m.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const visibleContributions = searchQuery
-    ? contributions.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? contributions.filter((c) => c.member?.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : contributions
 
-  function handleRecord() {
+  async function handleRecord() {
     const amt = Number(formAmount)
-    if (!amt || amt <= 0) return
+    if (!amt || amt <= 0 || !formMemberId) return
 
-    recordContribution(formMember, amt, formMethod, 'treasurer')
-    setFormAmount('')
-    setShowForm(false)
+    setSubmitting(true)
+    try {
+      await recordContribution(formMemberId, amt, formMethod, 'treasurer')
+      setFormAmount('')
+      setShowForm(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!activeGroup) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        No active group — create or select a group first.
+      </div>
+    )
   }
 
   return (
@@ -54,7 +75,7 @@ export default function Contributions() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text">Contributions</h1>
-          <p className="text-sm text-text-muted mt-1">Track and record member payments</p>
+          <p className="text-sm text-text-muted mt-1">{activeGroup.name}</p>
         </div>
         <Button className="gap-2" onClick={() => setShowForm((s) => !s)}>
           {showForm ? <X size={16} /> : <Plus size={16} />}
@@ -73,12 +94,12 @@ export default function Contributions() {
             <div>
               <label className="text-xs text-text-muted block mb-1.5">Member</label>
               <select
-                value={formMember}
-                onChange={(e) => setFormMember(e.target.value)}
+                value={formMemberId}
+                onChange={(e) => setFormMemberId(e.target.value)}
                 className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                {allMembers.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                {groupMembers.map((m) => (
+                  <option key={m._id} value={m._id}>{m.name}</option>
                 ))}
               </select>
             </div>
@@ -108,9 +129,9 @@ export default function Contributions() {
             </div>
           </div>
 
-          <Button onClick={handleRecord} className="gap-2">
+          <Button onClick={handleRecord} disabled={submitting} className="gap-2">
             <Plus size={16} />
-            Confirm & Record
+            {submitting ? 'Recording...' : 'Confirm & Record'}
           </Button>
         </div>
       )}
@@ -139,14 +160,14 @@ export default function Contributions() {
             {filteredMembers.length > 0 ? (
               filteredMembers.map((m) => (
                 <button
-                  key={m}
+                  key={m._id}
                   onClick={() => {
-                    setSearchQuery(m)
+                    setSearchQuery(m.name)
                     setShowDropdown(false)
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover transition-colors"
                 >
-                  {m}
+                  {m.name}
                 </button>
               ))
             ) : (
@@ -182,10 +203,12 @@ export default function Contributions() {
           <tbody className="divide-y divide-border">
             {visibleContributions.length > 0 ? (
               visibleContributions.map((c) => (
-                <tr key={c.id} className="hover:bg-surface-hover transition-colors">
-                  <td className="px-5 py-4 text-text font-medium">{c.name}</td>
+                <tr key={c._id} className="hover:bg-surface-hover transition-colors">
+                  <td className="px-5 py-4 text-text font-medium">{c.member?.name || 'Unknown'}</td>
                   <td className="px-5 py-4 font-mono text-text">KES {c.amount.toLocaleString()}</td>
-                  <td className="px-5 py-4 text-text-muted">{c.date}</td>
+                  <td className="px-5 py-4 text-text-muted">
+                    {new Date(c.createdAt).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </td>
                   <td className="px-5 py-4 text-text-muted">{c.method}</td>
                   <td className="px-5 py-4">
                     {c.recordedBy === 'treasurer' ? (
@@ -206,7 +229,7 @@ export default function Contributions() {
             ) : (
               <tr>
                 <td colSpan={6} className="px-5 py-8 text-center text-text-muted text-sm">
-                  No contributions found for "{searchQuery}"
+                  {searchQuery ? `No contributions found for "${searchQuery}"` : 'No contributions recorded yet.'}
                 </td>
               </tr>
             )}

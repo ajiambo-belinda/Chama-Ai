@@ -6,28 +6,42 @@ import { useChama } from '../context/ChamaContext'
 
 export default function Dashboard() {
   const greeting = getGreeting()
-  const { members, loans, contributions, INTEREST_RATE } = useChama()
+  const { activeGroup, loans, contributions } = useChama()
 
-  const memberNames = Object.keys(members)
-  const groupBalance = Object.values(members).reduce((sum, m) => sum + m.savings, 0)
+  if (!activeGroup) {
+    return (
+      <div className="space-y-7">
+        <div>
+          <h1 className="text-2xl font-semibold text-text">{greeting}, Lyndah</h1>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+          No active group yet — head to Groups to create or join one.
+        </div>
+      </div>
+    )
+  }
+
+  const groupMembers = activeGroup.members
+  const groupBalance = groupMembers.reduce((sum, m) => sum + m.savings, 0)
 
   const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'at-risk')
   const activeLoanTotal = activeLoans.reduce((sum, l) => sum + l.principal, 0)
 
-  // "This cycle" = contributions recorded today/most recently — using all for now until real dates exist
-  const cycleTarget = memberNames.length * 5000 // rough placeholder target: 5,000 per member
+  const cycleTarget = groupMembers.length * 5000
   const cycleCollected = contributions
     .filter((c) => c.status === 'confirmed')
     .reduce((sum, c) => sum + c.amount, 0)
-  const cyclePercent = Math.min(Math.round((cycleCollected / cycleTarget) * 100), 100)
+  const cyclePercent = cycleTarget ? Math.min(Math.round((cycleCollected / cycleTarget) * 100), 100) : 0
 
-  const atRiskMember = loans.find((l) => l.status === 'at-risk')
+  const atRiskLoan = loans.find((l) => l.status === 'at-risk')
 
-  const memberStatus = memberNames.map((name) => {
-    const memberContributions = contributions.filter((c) => c.name === name)
+  const memberStatus = groupMembers.map((member) => {
+    const memberContributions = contributions.filter((c) => c.member?._id === member._id)
     const hasConfirmedThisCycle = memberContributions.some((c) => c.status === 'confirmed')
     const hasPending = memberContributions.some((c) => c.status === 'pending')
-    const memberLoan = loans.find((l) => l.name === name && (l.status === 'at-risk' || l.status === 'defaulted'))
+    const memberLoan = loans.find(
+      (l) => l.member._id === member._id && (l.status === 'at-risk' || l.status === 'defaulted')
+    )
 
     let percent = 0
     let tone = 'primary'
@@ -47,13 +61,13 @@ export default function Dashboard() {
       status = 'Payment pending'
     }
 
-    return { name, percent, tone, status }
+    return { name: member.name, percent, tone, status }
   })
 
   return (
     <div className="space-y-7">
       <div>
-        <p className="text-sm text-text-muted font-mono">Bumbe Genesis Savings Group</p>
+        <p className="text-sm text-text-muted font-mono">{activeGroup.name}</p>
         <h1 className="text-2xl font-semibold text-text mt-1">{greeting}, Lyndah</h1>
       </div>
 
@@ -83,7 +97,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {atRiskMember && (
+      {atRiskLoan && (
         <div className="bg-accent/10 border border-accent/25 rounded-xl p-5 flex items-start gap-4">
           <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
             <Sparkles size={17} className="text-accent" />
@@ -91,7 +105,7 @@ export default function Dashboard() {
           <div className="flex-1">
             <p className="text-sm font-medium text-text">AI Treasurer flagged something</p>
             <p className="text-sm text-text-muted mt-1">
-              {atRiskMember.name} is behind on their loan repayment — pattern matches early default risk.
+              {atRiskLoan.member.name} is behind on their loan repayment — pattern matches early default risk.
               Consider a check-in before further action.
             </p>
           </div>
@@ -108,7 +122,7 @@ export default function Dashboard() {
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-sm font-medium text-text">This cycle's contributions</h2>
           <span className="text-xs text-text-muted font-mono">
-            {memberStatus.filter((m) => m.tone === 'success').length} of {memberNames.length} members
+            {memberStatus.filter((m) => m.tone === 'success').length} of {groupMembers.length} members
           </span>
         </div>
         <div className="divide-y divide-border">

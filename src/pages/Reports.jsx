@@ -1,11 +1,11 @@
 import { Sparkles, Download, TrendingUp } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { useChama } from '../context/ChamaContext'
+import jsPDF from 'jspdf'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import jsPDF from 'jspdf'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -20,23 +20,26 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Reports() {
-  const { groups, members, loans, contributions, getGroupBalance } = useChama()
+  const { activeGroup, loans, contributions } = useChama()
 
-  const activeGroup = groups.find((g) => g.active) || groups[0]
-  const groupMembers = activeGroup?.members || []
+  if (!activeGroup) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        No active group — create or select a group first.
+      </div>
+    )
+  }
 
-  const groupLoans = loans.filter((l) => groupMembers.includes(l.name))
-  const groupContributions = contributions.filter((c) => groupMembers.includes(c.name))
-  const balance = getGroupBalance(groupMembers)
+  const balance = activeGroup.members.reduce((sum, m) => sum + m.savings, 0)
 
-  const totalCollected = groupContributions
+  const totalCollected = contributions
     .filter((c) => c.status === 'confirmed')
     .reduce((sum, c) => sum + c.amount, 0)
 
-  const cycleTarget = groupMembers.length * 5000
+  const cycleTarget = activeGroup.members.length * 5000
   const collectionRate = cycleTarget ? Math.min(Math.round((totalCollected / cycleTarget) * 100), 100) : 0
 
-  const loanStatusCounts = groupLoans.reduce((acc, l) => {
+  const loanStatusCounts = loans.reduce((acc, l) => {
     acc[l.status] = (acc[l.status] || 0) + 1
     return acc
   }, {})
@@ -55,123 +58,107 @@ export default function Reports() {
     color: statusColors[name],
   }))
 
-  // Trend history isn't tracked yet (needs backend/timestamps) — showing current cycle only until then
   const trend = [{ month: 'This cycle', amount: totalCollected }]
 
-  const riskyMembers = groupLoans.filter((l) => l.status === 'at-risk' || l.status === 'defaulted')
+  const riskyMembers = loans.filter((l) => l.status === 'at-risk' || l.status === 'defaulted')
 
   const summary = riskyMembers.length > 0
-    ? `The group has collected KES ${totalCollected.toLocaleString()} this cycle, ${collectionRate}% of the KES ${cycleTarget.toLocaleString()} target. ${riskyMembers.map((l) => l.name).join(', ')} ${riskyMembers.length === 1 ? 'is' : 'are'} showing default risk and should be prioritized for follow-up.`
+    ? `The group has collected KES ${totalCollected.toLocaleString()} this cycle, ${collectionRate}% of the KES ${cycleTarget.toLocaleString()} target. ${riskyMembers.map((l) => l.member.name).join(', ')} ${riskyMembers.length === 1 ? 'is' : 'are'} showing default risk and should be prioritized for follow-up.`
     : `The group has collected KES ${totalCollected.toLocaleString()} this cycle, ${collectionRate}% of the KES ${cycleTarget.toLocaleString()} target. No members are currently at risk — the group is in good standing.`
 
-  if (!activeGroup) {
-    return (
-      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
-        No groups yet — create one on the Groups page first.
-      </div>
-    )
-  }
-
   function handleExportPDF() {
-  const doc = new jsPDF()
-  const pageWidth = doc.internal.pageSize.getWidth()
-  let y = 20
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    let y = 20
 
-  // Header
-  doc.setFontSize(18)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Chama AI — Monthly Report', 14, y)
-  y += 8
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Chama AI — Monthly Report', 14, y)
+    y += 8
 
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100)
-  doc.text(activeGroup.name, 14, y)
-  y += 6
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}`, 14, y)
-  y += 12
-
-  // Divider
-  doc.setDrawColor(220)
-  doc.line(14, y, pageWidth - 14, y)
-  y += 10
-
-  // Stats
-  doc.setFontSize(13)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(20)
-  doc.text('Summary', 14, y)
-  y += 8
-
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'normal')
-  const stats = [
-    ['Group balance', `KES ${balance.toLocaleString()}`],
-    ['This cycle collected', `KES ${totalCollected.toLocaleString()}`],
-    ['Collection rate', `${collectionRate}%`],
-  ]
-  stats.forEach(([label, value]) => {
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(100)
-    doc.text(label, 14, y)
+    doc.text(activeGroup.name, 14, y)
+    y += 6
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}`, 14, y)
+    y += 12
+
+    doc.setDrawColor(220)
+    doc.line(14, y, pageWidth - 14, y)
+    y += 10
+
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
     doc.setTextColor(20)
-    doc.text(value, pageWidth - 14, y, { align: 'right' })
-    y += 7
-  })
-  y += 6
+    doc.text('Summary', 14, y)
+    y += 8
 
-  // AI Summary
-  doc.setDrawColor(220)
-  doc.line(14, y, pageWidth - 14, y)
-  y += 10
-
-  doc.setFontSize(13)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(20)
-  doc.text('AI Monthly Summary', 14, y)
-  y += 8
-
-  doc.setFontSize(10.5)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(60)
-  const summaryLines = doc.splitTextToSize(summary, pageWidth - 28)
-  doc.text(summaryLines, 14, y)
-  y += summaryLines.length * 5.5 + 10
-
-  // Loan breakdown
-  doc.setDrawColor(220)
-  doc.line(14, y, pageWidth - 14, y)
-  y += 10
-
-  doc.setFontSize(13)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(20)
-  doc.text('Loan Status Breakdown', 14, y)
-  y += 8
-
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'normal')
-  if (loanBreakdown.length > 0) {
-    loanBreakdown.forEach((item) => {
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'normal')
+    const stats = [
+      ['Group balance', `KES ${balance.toLocaleString()}`],
+      ['This cycle collected', `KES ${totalCollected.toLocaleString()}`],
+      ['Collection rate', `${collectionRate}%`],
+    ]
+    stats.forEach(([label, value]) => {
       doc.setTextColor(100)
-      doc.text(item.name, 14, y)
+      doc.text(label, 14, y)
       doc.setTextColor(20)
-      doc.text(`${item.value} loan${item.value !== 1 ? 's' : ''}`, pageWidth - 14, y, { align: 'right' })
+      doc.text(value, pageWidth - 14, y, { align: 'right' })
       y += 7
     })
-  } else {
-    doc.setTextColor(120)
-    doc.text('No loans recorded for this group.', 14, y)
-    y += 7
+    y += 6
+
+    doc.setDrawColor(220)
+    doc.line(14, y, pageWidth - 14, y)
+    y += 10
+
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(20)
+    doc.text('AI Monthly Summary', 14, y)
+    y += 8
+
+    doc.setFontSize(10.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(60)
+    const summaryLines = doc.splitTextToSize(summary, pageWidth - 28)
+    doc.text(summaryLines, 14, y)
+    y += summaryLines.length * 5.5 + 10
+
+    doc.setDrawColor(220)
+    doc.line(14, y, pageWidth - 14, y)
+    y += 10
+
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(20)
+    doc.text('Loan Status Breakdown', 14, y)
+    y += 8
+
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'normal')
+    if (loanBreakdown.length > 0) {
+      loanBreakdown.forEach((item) => {
+        doc.setTextColor(100)
+        doc.text(item.name, 14, y)
+        doc.setTextColor(20)
+        doc.text(`${item.value} loan${item.value !== 1 ? 's' : ''}`, pageWidth - 14, y, { align: 'right' })
+        y += 7
+      })
+    } else {
+      doc.setTextColor(120)
+      doc.text('No loans recorded for this group.', 14, y)
+    }
+
+    doc.setFontSize(9)
+    doc.setTextColor(150)
+    doc.text('Generated by Chama AI', 14, doc.internal.pageSize.getHeight() - 10)
+
+    const fileName = `${activeGroup.name.replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}.pdf`
+    doc.save(fileName)
   }
-
-  // Footer
-  doc.setFontSize(9)
-  doc.setTextColor(150)
-  doc.text('Generated by Chama AI', 14, doc.internal.pageSize.getHeight() - 10)
-
-  const fileName = `${activeGroup.name.replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}.pdf`
-  doc.save(fileName)
-}
 
   return (
     <div className="space-y-6">
@@ -181,9 +168,9 @@ export default function Reports() {
           <p className="text-sm text-text-muted mt-1">{activeGroup.name}</p>
         </div>
         <Button variant="outline" className="gap-2" onClick={handleExportPDF}>
-  <Download size={16} />
-  Export PDF
-</Button>
+          <Download size={16} />
+          Export PDF
+        </Button>
       </div>
 
       <div className="bg-accent/10 border border-accent/25 rounded-xl p-5 flex items-start gap-4">
@@ -216,7 +203,7 @@ export default function Reports() {
           <h2 className="text-sm font-medium text-text">Contribution trend</h2>
           <span className="text-xs text-text-muted flex items-center gap-1">
             <TrendingUp size={12} />
-            Historical trend available once backend is connected
+            Historical trend builds over time
           </span>
         </div>
         <ResponsiveContainer width="100%" height={200}>
