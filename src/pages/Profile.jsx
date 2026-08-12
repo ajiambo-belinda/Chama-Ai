@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Minus, ArrowUpFromLine, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Plus, Minus, ArrowUpFromLine, Clock, CheckCircle2, AlertCircle, Smartphone } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import ContributionRing from '../components/ContributionRing'
 import { useChama } from '../context/ChamaContext'
@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 
 export default function Profile() {
   const { user } = useAuth()
-  const { activeGroup, loans, recordContribution, repayLoan } = useChama()
+  const { activeGroup, loans, recordContribution, repayLoan, payViaMpesa } = useChama()
 
   const currentUserMember = activeGroup?.members.find((m) => m._id === user._id)
   const savings = currentUserMember?.savings || 0
@@ -25,17 +25,32 @@ export default function Profile() {
   const [repayAmount, setRepayAmount] = useState('')
   const [savingBusy, setSavingBusy] = useState(false)
   const [repayBusy, setRepayBusy] = useState(false)
+  const [saveMethod, setSaveMethod] = useState('Cash')
+  const [mpesaPhone, setMpesaPhone] = useState(user?.phone || '')
+  const [mpesaStatus, setMpesaStatus] = useState('')
 
   async function handleAddSavings() {
     const amt = Number(saveAmount)
-    if (amt > 0 && user) {
-      setSavingBusy(true)
-      try {
+    if (!(amt > 0 && user)) return
+
+    setSavingBusy(true)
+    setMpesaStatus('')
+    try {
+      if (saveMethod === 'M-Pesa') {
+        if (!mpesaPhone) {
+          setMpesaStatus('Enter a phone number.')
+          return
+        }
+        await payViaMpesa(user._id, amt, mpesaPhone)
+        setMpesaStatus('STK push sent — check your phone to enter your M-Pesa PIN.')
+      } else {
         await recordContribution(user._id, amt, 'Cash', 'self')
-        setSaveAmount('')
-      } finally {
-        setSavingBusy(false)
       }
+      setSaveAmount('')
+    } catch (err) {
+      setMpesaStatus(err.response?.data?.message || 'Payment failed. Please try again.')
+    } finally {
+      setSavingBusy(false)
     }
   }
 
@@ -88,6 +103,27 @@ export default function Profile() {
       <div className="bg-surface border border-border rounded-xl p-5">
         <h2 className="text-sm font-medium text-text mb-3">Add to my savings</h2>
         <p className="text-xs text-text-muted mb-3">Save any amount, any time — your balance updates instantly.</p>
+
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => setSaveMethod('Cash')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              saveMethod === 'Cash' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'
+            }`}
+          >
+            Cash
+          </button>
+          <button
+            onClick={() => setSaveMethod('M-Pesa')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
+              saveMethod === 'M-Pesa' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'
+            }`}
+          >
+            <Smartphone size={12} />
+            M-Pesa
+          </button>
+        </div>
+
         <div className="flex gap-2">
           <input
             type="number"
@@ -96,11 +132,26 @@ export default function Profile() {
             placeholder="Amount (KES)"
             className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
           />
+          {saveMethod === 'M-Pesa' && (
+            <input
+              type="tel"
+              value={mpesaPhone}
+              onChange={(e) => setMpesaPhone(e.target.value)}
+              placeholder="0712345678"
+              className="w-36 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          )}
           <Button onClick={handleAddSavings} disabled={savingBusy} className="gap-2">
-            <Plus size={16} />
-            {savingBusy ? 'Saving...' : 'Save'}
+            {saveMethod === 'M-Pesa' ? <Smartphone size={16} /> : <Plus size={16} />}
+            {savingBusy ? 'Sending...' : saveMethod === 'M-Pesa' ? 'Pay' : 'Save'}
           </Button>
         </div>
+
+        {mpesaStatus && (
+          <p className={`text-xs mt-2 ${mpesaStatus.includes('sent') ? 'text-accent' : 'text-danger'}`}>
+            {mpesaStatus}
+          </p>
+        )}
       </div>
 
       {myLoan && (

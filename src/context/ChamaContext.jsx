@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext'
 import { fetchMyGroups, createGroupAPI, updateGroupAPI  } from '../api/groups'
 import { fetchGroupContributions, recordContributionAPI } from '../api/contributions'
 import { fetchGroupLoans, requestLoanAPI, repayLoanAPI, markDefaultedAPI } from '../api/loans'
+import { triggerSTKPushAPI } from '../api/mpesa'
 
 const ChamaContext = createContext(null)
 
@@ -75,6 +76,12 @@ export function ChamaProvider({ children }) {
     setGroups(updatedGroups)
   }
 
+  async function payViaMpesa(memberId, amount, phoneNumber) {
+  if (!activeGroup) return
+  const result = await triggerSTKPushAPI(activeGroup._id, memberId, amount, phoneNumber)
+  return result
+}
+
   async function requestLoan(amount) {
     if (!activeGroup) return
     await requestLoanAPI(activeGroup._id, amount)
@@ -123,6 +130,7 @@ export function ChamaProvider({ children }) {
   switchActiveGroup,
   updateGroupSettings,
   recordContribution,
+  payViaMpesa,
   requestLoan,
   repayLoan,
   markDefaulted,
