@@ -1,9 +1,16 @@
 import { Sparkles, AlertTriangle, TrendingDown, MessageSquare, CheckCircle2 } from 'lucide-react'
 import ContributionRing from '../components/ContributionRing'
 import { useChama } from '../context/ChamaContext'
+import { useState } from 'react'
+import { askAiTreasurerAPI } from '../api/aiTreasurer'
 
 export default function AiTreasurer() {
   const { activeGroup, loans, contributions } = useChama()
+
+
+  const [chatQuestion, setChatQuestion] = useState('')
+const [chatAnswer, setChatAnswer] = useState('')
+const [chatBusy, setChatBusy] = useState(false)
 
   const insights = []
 
@@ -63,6 +70,20 @@ export default function AiTreasurer() {
         })
       })
   }
+
+  async function handleAskAi() {
+  if (!chatQuestion.trim() || !activeGroup) return
+  setChatBusy(true)
+  setChatAnswer('')
+  try {
+    const result = await askAiTreasurerAPI(activeGroup._id, chatQuestion)
+    setChatAnswer(result.answer)
+  } catch (err) {
+    setChatAnswer('Sorry, something went wrong. Please try again.')
+  } finally {
+    setChatBusy(false)
+  }
+}
 
   const severityStyles = {
     high: { badge: 'bg-danger/10 text-danger', icon: AlertTriangle },
@@ -134,15 +155,36 @@ export default function AiTreasurer() {
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded-xl p-5 flex items-center gap-3">
-        <MessageSquare size={18} className="text-text-muted" />
-        <div>
-          <p className="text-sm text-text">Ask the AI Treasurer directly</p>
-          <p className="text-xs text-text-muted mt-0.5">
-            Conversational queries like "who hasn't paid this month" — coming in a future update.
-          </p>
-        </div>
-      </div>
+      <div className="bg-surface border border-border rounded-xl p-5">
+  <div className="flex items-center gap-2 mb-3">
+    <MessageSquare size={18} className="text-text-muted" />
+    <p className="text-sm font-medium text-text">Ask the AI Treasurer directly</p>
+  </div>
+
+  <div className="flex gap-2 mb-3">
+    <input
+      type="text"
+      value={chatQuestion}
+      onChange={(e) => setChatQuestion(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && !chatBusy && handleAskAi()}
+      placeholder="e.g. Who hasn't paid this month?"
+      className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+    />
+    <button
+      onClick={handleAskAi}
+      disabled={chatBusy || !chatQuestion.trim()}
+      className="text-xs font-medium text-white bg-primary px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+    >
+      {chatBusy ? 'Thinking...' : 'Ask'}
+    </button>
+  </div>
+
+  {chatAnswer && (
+    <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 text-sm text-text leading-relaxed">
+      {chatAnswer}
+    </div>
+  )}
+</div>
     </div>
   )
 }

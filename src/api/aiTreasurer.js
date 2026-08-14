@@ -1,0 +1,6 @@
+import API from './axios'
+
+export async function askAiTreasurerAPI(groupId, question) {
+  const { data } = await API.post('/ai-treasurer/ask', { groupId, question })
+  return data
+}
