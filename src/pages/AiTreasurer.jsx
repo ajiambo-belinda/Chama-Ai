@@ -1,16 +1,15 @@
+import { useState } from 'react'
 import { Sparkles, AlertTriangle, TrendingDown, MessageSquare, CheckCircle2 } from 'lucide-react'
 import ContributionRing from '../components/ContributionRing'
 import { useChama } from '../context/ChamaContext'
-import { useState } from 'react'
 import { askAiTreasurerAPI } from '../api/aiTreasurer'
 
 export default function AiTreasurer() {
   const { activeGroup, loans, contributions } = useChama()
 
-
   const [chatQuestion, setChatQuestion] = useState('')
-const [chatAnswer, setChatAnswer] = useState('')
-const [chatBusy, setChatBusy] = useState(false)
+  const [chatHistory, setChatHistory] = useState([])
+  const [chatBusy, setChatBusy] = useState(false)
 
   const insights = []
 
@@ -72,18 +71,19 @@ const [chatBusy, setChatBusy] = useState(false)
   }
 
   async function handleAskAi() {
-  if (!chatQuestion.trim() || !activeGroup) return
-  setChatBusy(true)
-  setChatAnswer('')
-  try {
-    const result = await askAiTreasurerAPI(activeGroup._id, chatQuestion)
-    setChatAnswer(result.answer)
-  } catch (err) {
-    setChatAnswer('Sorry, something went wrong. Please try again.')
-  } finally {
-    setChatBusy(false)
+    if (!chatQuestion.trim() || !activeGroup) return
+    const question = chatQuestion.trim()
+    setChatQuestion('')
+    setChatBusy(true)
+    try {
+      const result = await askAiTreasurerAPI(activeGroup._id, question)
+      setChatHistory((prev) => [...prev, { question, answer: result.answer }])
+    } catch (err) {
+      setChatHistory((prev) => [...prev, { question, answer: 'Sorry, something went wrong. Please try again.' }])
+    } finally {
+      setChatBusy(false)
+    }
   }
-}
 
   const severityStyles = {
     high: { badge: 'bg-danger/10 text-danger', icon: AlertTriangle },
@@ -156,35 +156,42 @@ const [chatBusy, setChatBusy] = useState(false)
       )}
 
       <div className="bg-surface border border-border rounded-xl p-5">
-  <div className="flex items-center gap-2 mb-3">
-    <MessageSquare size={18} className="text-text-muted" />
-    <p className="text-sm font-medium text-text">Ask the AI Treasurer directly</p>
-  </div>
+        <div className="flex items-center gap-2 mb-3">
+          <MessageSquare size={18} className="text-text-muted" />
+          <p className="text-sm font-medium text-text">Ask the AI Treasurer directly</p>
+        </div>
 
-  <div className="flex gap-2 mb-3">
-    <input
-      type="text"
-      value={chatQuestion}
-      onChange={(e) => setChatQuestion(e.target.value)}
-      onKeyDown={(e) => e.key === 'Enter' && !chatBusy && handleAskAi()}
-      placeholder="e.g. Who hasn't paid this month?"
-      className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
-    />
-    <button
-      onClick={handleAskAi}
-      disabled={chatBusy || !chatQuestion.trim()}
-      className="text-xs font-medium text-white bg-primary px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
-    >
-      {chatBusy ? 'Thinking...' : 'Ask'}
-    </button>
-  </div>
+        {chatHistory.length > 0 && (
+          <div className="space-y-3 mb-3 max-h-72 overflow-y-auto">
+            {chatHistory.map((entry, i) => (
+              <div key={i} className="space-y-1.5">
+                <p className="text-sm text-text font-medium">{entry.question}</p>
+                <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 text-sm text-text leading-relaxed">
+                  {entry.answer}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-  {chatAnswer && (
-    <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 text-sm text-text leading-relaxed">
-      {chatAnswer}
-    </div>
-  )}
-</div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={chatQuestion}
+            onChange={(e) => setChatQuestion(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !chatBusy && handleAskAi()}
+            placeholder="e.g. Who hasn't paid this month?"
+            className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            onClick={handleAskAi}
+            disabled={chatBusy || !chatQuestion.trim()}
+            className="text-xs font-medium text-white bg-primary px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+          >
+            {chatBusy ? 'Thinking...' : 'Ask'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

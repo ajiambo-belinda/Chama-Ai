@@ -1,23 +1,57 @@
 import { useState } from 'react'
-import { Plus, X, Users, ArrowRight, Crown, Check, Search, AlertCircle } from 'lucide-react'
+import { Plus, X, Users, ArrowRight, Crown, Check, Search, AlertCircle, CheckCircle2, XCircle, Sparkles } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { useChama } from '../context/ChamaContext'
 import { useAuth } from '../context/AuthContext'
 import { lookupUser } from '../api/users'
+import { getWithdrawalRecommendationAPI } from '../api/aiTreasurer'
 
 export default function Groups() {
   const { user } = useAuth()
-  const { groups, activeGroupId, createGroup, switchActiveGroup } = useChama()
+  const { groups, activeGroupId, withdrawals, createGroup, switchActiveGroup, approveWithdrawal, rejectWithdrawal } = useChama()
 
   const [showForm, setShowForm] = useState(false)
   const [formName, setFormName] = useState('')
   const [formCycle, setFormCycle] = useState('Monthly')
-  const [selectedMembers, setSelectedMembers] = useState([]) // [{ _id, name, email, savings }]
+  const [selectedMembers, setSelectedMembers] = useState([])
   const [emailInput, setEmailInput] = useState('')
   const [lookupError, setLookupError] = useState('')
   const [looking, setLooking] = useState(false)
+  const [recommendations, setRecommendations] = useState({})
+  const [loadingRec, setLoadingRec] = useState(null)
+  const [processingId, setProcessingId] = useState(null)
 
   const selectedBalance = selectedMembers.reduce((sum, m) => sum + (m.savings || 0), 0)
+
+  async function handleGetRecommendation(withdrawalId) {
+    setLoadingRec(withdrawalId)
+    try {
+      const result = await getWithdrawalRecommendationAPI(withdrawalId)
+      setRecommendations((prev) => ({ ...prev, [withdrawalId]: result.recommendation }))
+    } catch (err) {
+      setRecommendations((prev) => ({ ...prev, [withdrawalId]: 'Could not get a recommendation right now.' }))
+    } finally {
+      setLoadingRec(null)
+    }
+  }
+
+  async function handleApprove(id) {
+    setProcessingId(id)
+    try {
+      await approveWithdrawal(id)
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  async function handleReject(id) {
+    setProcessingId(id)
+    try {
+      await rejectWithdrawal(id)
+    } finally {
+      setProcessingId(null)
+    }
+  }
 
   async function handleAddByEmail() {
     setLookupError('')
@@ -221,6 +255,61 @@ export default function Groups() {
                     Switch to this group
                     <ArrowRight size={12} />
                   </button>
+                )}
+
+                {isActive && isTreasurer && withdrawals.filter((w) => w.status === 'pending').length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border space-y-2">
+                    <p className="text-xs font-medium text-text-muted mb-2">Pending withdrawal requests</p>
+                    {withdrawals
+                      .filter((w) => w.status === 'pending')
+                      .map((w) => (
+                        <div key={w._id} className="bg-warning/5 border border-warning/20 rounded-lg px-3 py-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-text font-medium">{w.member?.name}</p>
+                              <p className="text-xs text-text-muted font-mono">KES {w.amount.toLocaleString()}</p>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleGetRecommendation(w._id)}
+                                disabled={loadingRec === w._id}
+                                className="text-accent hover:bg-accent/10 rounded p-1.5 transition-colors disabled:opacity-50"
+                                title="Get AI recommendation"
+                              >
+                                <Sparkles size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleApprove(w._id)}
+                                disabled={processingId === w._id}
+                                className="text-success hover:bg-success/10 rounded p-1.5 transition-colors disabled:opacity-50"
+                                title="Approve"
+                              >
+                                <CheckCircle2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleReject(w._id)}
+                                disabled={processingId === w._id}
+                                className="text-danger hover:bg-danger/10 rounded p-1.5 transition-colors disabled:opacity-50"
+                                title="Reject"
+                              >
+                                <XCircle size={16} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {loadingRec === w._id && (
+                            <p className="text-xs text-text-muted mt-2 italic">Getting AI recommendation...</p>
+                          )}
+
+                          {recommendations[w._id] && (
+                            <div className="mt-2 pt-2 border-t border-warning/20 flex items-start gap-1.5">
+                              <Sparkles size={12} className="text-accent mt-0.5 shrink-0" />
+                              <p className="text-xs text-text leading-relaxed">{recommendations[w._id]}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
                 )}
               </div>
             )

@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useAuth } from './AuthContext'
-import { fetchMyGroups, createGroupAPI, updateGroupAPI  } from '../api/groups'
+import { fetchMyGroups, createGroupAPI, updateGroupAPI, addGroupMemberAPI, removeGroupMemberAPI } from '../api/groups'
 import { fetchGroupContributions, recordContributionAPI } from '../api/contributions'
 import { fetchGroupLoans, requestLoanAPI, repayLoanAPI, markDefaultedAPI } from '../api/loans'
 import { triggerSTKPushAPI } from '../api/mpesa'
+import { requestWithdrawalAPI, fetchGroupWithdrawals, approveWithdrawalAPI, rejectWithdrawalAPI } from '../api/withdrawals'
 
 const ChamaContext = createContext(null)
 
@@ -14,6 +15,7 @@ export function ChamaProvider({ children }) {
   const [activeGroupId, setActiveGroupId] = useState(null)
   const [contributions, setContributions] = useState([])
   const [loans, setLoans] = useState([])
+  const [withdrawals, setWithdrawals] = useState([])
   const [loading, setLoading] = useState(true)
 
   const activeGroup = groups.find((g) => g._id === activeGroupId) || groups[0]
@@ -30,15 +32,17 @@ export function ChamaProvider({ children }) {
   }, [user])
 
   // Whenever the active group changes, load its contributions and loans
-  const refreshGroupData = useCallback(async () => {
-    if (!activeGroup) return
-    const [contribData, loanData] = await Promise.all([
-      fetchGroupContributions(activeGroup._id),
-      fetchGroupLoans(activeGroup._id),
-    ])
-    setContributions(contribData)
-    setLoans(loanData)
-  }, [activeGroup])
+ const refreshGroupData = useCallback(async () => {
+  if (!activeGroup) return
+  const [contribData, loanData, withdrawalData] = await Promise.all([
+    fetchGroupContributions(activeGroup._id),
+    fetchGroupLoans(activeGroup._id),
+    fetchGroupWithdrawals(activeGroup._id),
+  ])
+  setContributions(contribData)
+  setLoans(loanData)
+  setWithdrawals(withdrawalData)
+}, [activeGroup])
 
   useEffect(() => {
     refreshGroupData()
@@ -100,6 +104,37 @@ export function ChamaProvider({ children }) {
     setGroups(updatedGroups)
   }
 
+
+  async function requestWithdrawal(amount) {
+  if (!activeGroup) return
+  await requestWithdrawalAPI(activeGroup._id, amount)
+  await refreshGroupData()
+}
+
+async function approveWithdrawal(withdrawalId) {
+  await approveWithdrawalAPI(withdrawalId)
+  await refreshGroupData()
+  const updatedGroups = await fetchMyGroups()
+  setGroups(updatedGroups)
+}
+
+async function rejectWithdrawal(withdrawalId) {
+  await rejectWithdrawalAPI(withdrawalId)
+  await refreshGroupData()
+}
+
+async function addGroupMember(email) {
+  if (!activeGroup) return
+  const updated = await addGroupMemberAPI(activeGroup._id, email)
+  setGroups((prev) => prev.map((g) => (g._id === updated._id ? updated : g)))
+}
+
+async function removeGroupMember(memberId) {
+  if (!activeGroup) return
+  const updated = await removeGroupMemberAPI(activeGroup._id, memberId)
+  setGroups((prev) => prev.map((g) => (g._id === updated._id ? updated : g)))
+}
+
   function getMemberLoan(memberId) {
     return loans.find(
       (l) => l.member._id === memberId && ['active', 'at-risk', 'pending'].includes(l.status)
@@ -138,6 +173,10 @@ export function ChamaProvider({ children }) {
   getEligibleLimit,
   getGroupBalance,
   refreshGroupData,
+  withdrawals,
+  requestWithdrawal,
+  approveWithdrawal,
+  rejectWithdrawal,
 }
 
   return <ChamaContext.Provider value={value}>{children}</ChamaContext.Provider>

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Save, Moon, Sun, Bell, Shield, Percent, Users2, AlertCircle, Crown } from 'lucide-react'
+import { Save, Moon, Sun, Bell, Shield, Percent, Users2, AlertCircle, Crown, Lock, X, UserMinus, Plus } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { useTheme } from '../hooks/useTheme'
 import { useChama } from '../context/ChamaContext'
 import { useAuth } from '../context/AuthContext'
 import { assignOfficialsAPI } from '../api/groups'
+import { changePasswordAPI } from '../api/auth'
 
 export default function Settings() {
   const { theme, toggleTheme } = useTheme()
   const { user } = useAuth()
-  const { activeGroup, updateGroupSettings } = useChama()
+  const { activeGroup, updateGroupSettings, addGroupMember, removeGroupMember } = useChama()
 
   const isTreasurer = activeGroup && (activeGroup.treasurer?._id === user._id || activeGroup.treasurer === user._id)
 
@@ -26,6 +27,24 @@ export default function Settings() {
   const [officialsSaving, setOfficialsSaving] = useState(false)
   const [officialsMessage, setOfficialsMessage] = useState('')
 
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwMessage, setPwMessage] = useState('')
+  const [pwError, setPwError] = useState('')
+
+  const [showMemberForm, setShowMemberForm] = useState(false)
+  const [memberEmail, setMemberEmail] = useState('')
+  const [memberSaving, setMemberSaving] = useState(false)
+  const [memberError, setMemberError] = useState('')
+
+  const [notifications, setNotifications] = useState({
+    contributionReminders: true,
+    loanDue: true,
+    aiInsights: true,
+    withdrawalRequests: true,
+  })
+
   useEffect(() => {
     if (activeGroup) {
       setInterestRate(activeGroup.interestRate)
@@ -41,13 +60,6 @@ export default function Settings() {
       setTreasurerId(activeGroup.officials.treasurer?._id || '')
     }
   }, [activeGroup])
-
-  const [notifications, setNotifications] = useState({
-    contributionReminders: true,
-    loanDue: true,
-    aiInsights: true,
-    withdrawalRequests: true,
-  })
 
   async function handleSaveChamaSettings() {
     setError('')
@@ -78,6 +90,44 @@ export default function Settings() {
     }
   }
 
+  async function handleChangePassword() {
+    setPwError('')
+    setPwMessage('')
+    if (newPw.length < 6) {
+      setPwError('New password must be at least 6 characters.')
+      return
+    }
+    setPwSaving(true)
+    try {
+      await changePasswordAPI(currentPw, newPw)
+      setPwMessage('Password updated successfully.')
+      setCurrentPw('')
+      setNewPw('')
+    } catch (err) {
+      setPwError(err.response?.data?.message || 'Failed to update password.')
+    } finally {
+      setPwSaving(false)
+    }
+  }
+
+  async function handleAddMember() {
+    setMemberError('')
+    if (!memberEmail.trim()) return
+    setMemberSaving(true)
+    try {
+      await addGroupMember(memberEmail.trim())
+      setMemberEmail('')
+    } catch (err) {
+      setMemberError(err.response?.data?.message || 'Failed to add member.')
+    } finally {
+      setMemberSaving(false)
+    }
+  }
+
+  async function handleRemoveMember(memberId) {
+    await removeGroupMember(memberId)
+  }
+
   function toggleNotification(key) {
     setNotifications((prev) => ({ ...prev, [key]: !prev[key] }))
   }
@@ -91,7 +141,6 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* Appearance — always available, not tied to any group */}
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -109,7 +158,7 @@ export default function Settings() {
 
       {!activeGroup && (
         <div className="bg-surface border border-border rounded-xl p-6 text-center text-text-muted text-sm">
-          No active group — create or select a group to manage loan rules and officials.
+          No active group — create or select a group to manage loan rules, officials, and members.
         </div>
       )}
 
@@ -223,10 +272,59 @@ export default function Settings() {
               </div>
             )}
           </div>
+
+          <div className="bg-surface border border-border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users2 size={16} className="text-primary" />
+                <p className="text-sm font-medium text-text">Manage members</p>
+              </div>
+              {isTreasurer && (
+                <Button variant="outline" size="sm" onClick={() => setShowMemberForm((s) => !s)} className="gap-1.5">
+                  {showMemberForm ? <X size={14} /> : <Plus size={14} />}
+                  {showMemberForm ? 'Cancel' : 'Add member'}
+                </Button>
+              )}
+            </div>
+
+            {showMemberForm && (
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="email"
+                  value={memberEmail}
+                  onChange={(e) => setMemberEmail(e.target.value)}
+                  placeholder="member@example.com"
+                  className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <Button onClick={handleAddMember} disabled={memberSaving} size="sm">
+                  {memberSaving ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+            )}
+            {memberError && <p className="text-xs text-danger mb-3">{memberError}</p>}
+
+            <div className="border border-border rounded-lg divide-y divide-border">
+              {activeGroup.members.map((m) => (
+                <div key={m._id} className="flex items-center justify-between px-3 py-2.5">
+                  <div>
+                    <span className="text-sm text-text">{m.name}</span>
+                    <span className="text-xs text-text-muted ml-2">{m.email}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-text-muted">KES {m.savings.toLocaleString()}</span>
+                    {isTreasurer && m._id !== user._id && (
+                      <button onClick={() => handleRemoveMember(m._id)} className="text-text-muted hover:text-danger" title="Remove member">
+                        <UserMinus size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       )}
 
-      {/* Notifications — always available */}
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Bell size={16} className="text-primary" />
@@ -258,34 +356,43 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Security — always available */}
       <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-4">
           <Shield size={16} className="text-primary" />
           <h2 className="text-sm font-medium text-text">Security</h2>
         </div>
-        <p className="text-xs text-text-muted mb-4">
-          Password and two-factor authentication settings coming in a future update.
-        </p>
-        <Button variant="outline" size="sm" disabled>
-          Change password
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-text-muted block mb-1.5">Current password</label>
+            <input
+              type="password"
+              value={currentPw}
+              onChange={(e) => setCurrentPw(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-muted block mb-1.5">New password</label>
+            <input
+              type="password"
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              placeholder="At least 6 characters"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {pwError && <p className="text-xs text-danger mt-2">{pwError}</p>}
+        {pwMessage && <p className="text-xs text-success mt-2">{pwMessage}</p>}
+
+        <Button onClick={handleChangePassword} disabled={pwSaving} size="sm" className="gap-2 mt-3">
+          <Lock size={14} />
+          {pwSaving ? 'Updating...' : 'Change password'}
         </Button>
       </div>
-
-      {activeGroup && (
-        <div className="bg-surface border border-border rounded-xl p-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users2 size={16} className="text-primary" />
-            <div>
-              <p className="text-sm font-medium text-text">Manage members</p>
-              <p className="text-xs text-text-muted mt-0.5">Invite, remove, or change roles for chama members</p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" disabled>
-            Coming soon
-          </Button>
-        </div>
-      )}
     </div>
   )
 }

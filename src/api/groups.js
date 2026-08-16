@@ -24,3 +24,13 @@ export async function assignOfficialsAPI(groupId, officials) {
   const { data } = await API.put(`/groups/${groupId}/officials`, officials)
   return data
 }
+
+export async function addGroupMemberAPI(groupId, email) {
+  const { data } = await API.post(`/groups/${groupId}/members`, { email })
+  return data
+}
+
+export async function removeGroupMemberAPI(groupId, memberId) {
+  const { data } = await API.delete(`/groups/${groupId}/members/${memberId}`)
+  return data
+}

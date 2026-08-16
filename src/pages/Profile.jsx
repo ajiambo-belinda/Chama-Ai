@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 
 export default function Profile() {
   const { user } = useAuth()
-  const { activeGroup, loans, recordContribution, repayLoan, payViaMpesa } = useChama()
+  const { activeGroup, loans, withdrawals, recordContribution, repayLoan, payViaMpesa, requestWithdrawal } = useChama()
 
   const currentUserMember = activeGroup?.members.find((m) => m._id === user._id)
   const savings = currentUserMember?.savings || 0
@@ -28,6 +28,9 @@ export default function Profile() {
   const [saveMethod, setSaveMethod] = useState('Cash')
   const [mpesaPhone, setMpesaPhone] = useState(user?.phone || '')
   const [mpesaStatus, setMpesaStatus] = useState('')
+  const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [withdrawBusy, setWithdrawBusy] = useState(false)
+  const [withdrawMessage, setWithdrawMessage] = useState('')
 
   async function handleAddSavings() {
     const amt = Number(saveAmount)
@@ -66,6 +69,25 @@ export default function Profile() {
       }
     }
   }
+
+  async function handleRequestWithdrawal() {
+    const amt = Number(withdrawAmount)
+    if (amt <= 0) return
+
+    setWithdrawBusy(true)
+    setWithdrawMessage('')
+    try {
+      await requestWithdrawal(amt)
+      setWithdrawAmount('')
+      setWithdrawMessage('Withdrawal request submitted — awaiting treasurer approval.')
+    } catch (err) {
+      setWithdrawMessage(err.response?.data?.message || 'Request failed.')
+    } finally {
+      setWithdrawBusy(false)
+    }
+  }
+
+  const myWithdrawals = withdrawals.filter((w) => w.member?._id === user._id || w.member === user._id)
 
   if (!activeGroup) {
     return (
@@ -187,6 +209,59 @@ export default function Profile() {
           No active loan.
         </div>
       )}
+
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <h2 className="text-sm font-medium text-text mb-3">Request a withdrawal</h2>
+
+        {myLoan ? (
+          <p className="text-xs text-danger flex items-center gap-1.5">
+            <AlertCircle size={13} />
+            Withdrawals are locked while you have an outstanding loan. Clear your loan to unlock.
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-text-muted mb-3">
+              Withdrawals need approval from your chama treasurer before funds are released — this protects everyone's collective savings.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="Amount (KES)"
+                max={savings}
+                className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <Button onClick={handleRequestWithdrawal} disabled={withdrawBusy} variant="outline" className="gap-2">
+                <ArrowUpFromLine size={16} />
+                {withdrawBusy ? 'Sending...' : 'Request'}
+              </Button>
+            </div>
+            {withdrawMessage && (
+              <p className={`text-xs mt-2 ${withdrawMessage.includes('submitted') ? 'text-accent' : 'text-danger'}`}>
+                {withdrawMessage}
+              </p>
+            )}
+          </>
+        )}
+
+        {myWithdrawals.length > 0 && (
+          <div className="space-y-2 mt-4 pt-4 border-t border-border">
+            {myWithdrawals.map((w) => (
+              <div key={w._id} className="flex items-center justify-between py-1">
+                <span className="text-sm text-text font-mono">KES {w.amount.toLocaleString()}</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${
+                  w.status === 'approved' ? 'bg-success/10 text-success' :
+                  w.status === 'rejected' ? 'bg-danger/10 text-danger' :
+                  'bg-warning/10 text-warning'
+                }`}>
+                  {w.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
