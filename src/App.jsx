@@ -13,6 +13,7 @@ import AiTreasurer from './pages/AiTreasurer'
 import Groups from './pages/Groups'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Dividends from './pages/Dividends'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
                       <Route path="/groups" element={<Groups />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/settings" element={<Settings />} />
+                      <Route path="/dividends" element={<Dividends />} />
                     </Routes>
                   </AppLayout>
                 </ProtectedRoute>

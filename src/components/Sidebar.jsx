@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, Wallet, HandCoins, FileBarChart, Sparkles, Settings, User } from 'lucide-react'
+import { LayoutDashboard, Users, Wallet, HandCoins, FileBarChart, Sparkles, Settings, User, Coins } from 'lucide-react'
 import Logo from './Logo'
 import { useAuth } from '../context/AuthContext'
 import { LogOut } from 'lucide-react'
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/reports', label: 'Reports', icon: FileBarChart },
   { to: '/ai-treasurer', label: 'AI Treasurer', icon: Sparkles, highlight: true },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/dividends', label: 'Dividends', icon: Coins },
 ]
 
 export default function Sidebar() {
