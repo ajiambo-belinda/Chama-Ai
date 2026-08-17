@@ -239,7 +239,7 @@ export default function Settings() {
               </p>
             )}
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { label: 'Chairman', value: chairman, setter: setChairman },
                 { label: 'Secretary', value: secretary, setter: setSecretary },

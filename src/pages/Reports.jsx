@@ -183,7 +183,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-surface border border-border rounded-xl p-5">
           <p className="text-sm text-text-muted">Group balance</p>
           <p className="text-xl font-mono font-semibold text-text mt-2">KES {balance.toLocaleString()}</p>
