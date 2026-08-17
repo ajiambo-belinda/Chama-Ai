@@ -204,7 +204,7 @@ export default function Groups() {
           <p className="text-xs text-text-muted mt-1">Create your first chama to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {groups.map((g) => {
             const isActive = g._id === activeGroupId
             const balance = g.members.reduce((sum, m) => sum + (m.savings || 0), 0)

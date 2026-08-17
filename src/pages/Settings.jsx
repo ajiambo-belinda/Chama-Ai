@@ -142,7 +142,7 @@ export default function Settings() {
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             {theme === 'dark' ? <Moon size={16} className="text-primary" /> : <Sun size={16} className="text-primary" />}
             <div>
@@ -177,7 +177,7 @@ export default function Settings() {
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-text-muted block mb-1.5">Interest rate (% per cycle)</label>
                 <input
@@ -215,7 +215,7 @@ export default function Settings() {
             </div>
 
             {isTreasurer && (
-              <div className="flex items-center gap-3 mt-4">
+              <div className="flex items-center gap-3 mt-4 flex-wrap">
                 <Button onClick={handleSaveChamaSettings} disabled={saving} className="gap-2">
                   <Save size={15} />
                   {saving ? 'Saving...' : 'Save changes'}
@@ -263,7 +263,7 @@ export default function Settings() {
             </div>
 
             {isTreasurer && (
-              <div className="flex items-center gap-3 mt-4">
+              <div className="flex items-center gap-3 mt-4 flex-wrap">
                 <Button onClick={handleSaveOfficials} disabled={officialsSaving} className="gap-2">
                   <Save size={15} />
                   {officialsSaving ? 'Saving...' : 'Save officials'}
@@ -274,7 +274,7 @@ export default function Settings() {
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Users2 size={16} className="text-primary" />
                 <p className="text-sm font-medium text-text">Manage members</p>
@@ -288,7 +288,7 @@ export default function Settings() {
             </div>
 
             {showMemberForm && (
-              <div className="flex gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-4">
                 <input
                   type="email"
                   value={memberEmail}
@@ -305,12 +305,12 @@ export default function Settings() {
 
             <div className="border border-border rounded-lg divide-y divide-border">
               {activeGroup.members.map((m) => (
-                <div key={m._id} className="flex items-center justify-between px-3 py-2.5">
-                  <div>
+                <div key={m._id} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                  <div className="min-w-0">
                     <span className="text-sm text-text">{m.name}</span>
-                    <span className="text-xs text-text-muted ml-2">{m.email}</span>
+                    <span className="text-xs text-text-muted ml-2 hidden sm:inline">{m.email}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="text-xs font-mono text-text-muted">KES {m.savings.toLocaleString()}</span>
                     {isTreasurer && m._id !== user._id && (
                       <button onClick={() => handleRemoveMember(m._id)} className="text-text-muted hover:text-danger" title="Remove member">
@@ -337,11 +337,11 @@ export default function Settings() {
             { key: 'aiInsights', label: 'AI Treasurer insights' },
             { key: 'withdrawalRequests', label: 'Withdrawal request updates' },
           ].map((item) => (
-            <div key={item.key} className="flex items-center justify-between">
+            <div key={item.key} className="flex items-center justify-between gap-3">
               <span className="text-sm text-text">{item.label}</span>
               <button
                 onClick={() => toggleNotification(item.key)}
-                className={`rounded-full relative transition-colors ${
+                className={`rounded-full relative transition-colors shrink-0 ${
                   notifications[item.key] ? 'bg-primary' : 'bg-border'
                 }`}
                 style={{ height: 22, width: 40 }}
@@ -362,7 +362,7 @@ export default function Settings() {
           <h2 className="text-sm font-medium text-text">Security</h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted block mb-1.5">Current password</label>
             <input
